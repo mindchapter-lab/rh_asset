@@ -1,1 +1,17 @@
-[]
+[
+ {
+  "date": "2026-11-11",
+  "hydrants": {
+   "current": 58,
+   "due": 240,
+   "overdue": 0,
+   "none": 0
+  },
+  "valves": {
+   "current": 463,
+   "due": 195,
+   "overdue": 119,
+   "none": 0
+  }
+ }
+]
