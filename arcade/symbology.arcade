@@ -1,0 +1,13 @@
+// Maintenance status for hydrants AND valves (5-year service cycle)
+// Map Viewer > layer > Styles > "+ Expression" > paste > Done
+// Then choose "Types (unique symbols)" and set the image icon for each value.
+// If a layer's date field isn't called lastmaint, change it on the next line.
+var lastServiced = $feature.lastmaint;
+
+if (IsEmpty(lastServiced)) { return "No record"; }
+
+var years = DateDiff(Now(), lastServiced, "days") / 365.25;
+
+if (years < 4)  { return "Current (under 4 yrs)"; }
+if (years < 5)  { return "Due soon (4-5 yrs)"; }
+return "Overdue (5+ yrs)";

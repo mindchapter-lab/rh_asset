@@ -1,0 +1,19 @@
+// Popup line: "Last serviced 5/26/2022 - 4.5 yrs ago - due 5/26/2027 (in 197 days)"
+// Map Viewer > layer > Pop-ups > Attribute expressions > "+ Add expression" > paste
+// Name it "Service status", then add {expression/expr0} to the popup text.
+var lastServiced = $feature.lastmaint;
+if (IsEmpty(lastServiced)) { return "No maintenance date on record"; }
+
+var years   = DateDiff(Now(), lastServiced, "days") / 365.25;
+var dueDate = DateAdd(lastServiced, 5, "years");
+var daysTo  = Round(DateDiff(dueDate, Now(), "days"), 0);
+
+var dueText = When(
+    daysTo < 0,  "overdue by " + Abs(daysTo) + " days",
+    daysTo == 0, "due today",
+                 "due in " + daysTo + " days"
+);
+
+return "Last serviced " + Text(lastServiced, "M/D/Y") +
+       " - " + Round(years, 1) + " yrs ago - due " +
+       Text(dueDate, "M/D/Y") + " (" + dueText + ")";
