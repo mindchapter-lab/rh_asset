@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Round Hill hydrant &amp; valve maintenance</title>
+<link rel="icon" href="icons/hydrant-current.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F2F4F1; --sheet:#FFFFFF; --ink:#16252E; --ink-2:#4A5A63; --rule:#CDD5D2;
+  --current:#1E9E4A; --due:#1F6FD1; --overdue:#D62828; --none:#7D8790;
+  --track:#E3E8E5;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --paper:#0F1A20; --sheet:#16242C; --ink:#E7EEEB; --ink-2:#A4B3B0; --rule:#2B3D46;
+    --current:#3CC46A; --due:#4C91EC; --overdue:#F0524F; --none:#93A0A7;
+    --track:#22333C;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font:400 16px/1.5 "Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.wrap{max-width:1120px; margin:0 auto; padding:40px 24px 64px}
+header{display:flex; flex-wrap:wrap; gap:16px 32px; align-items:flex-end; justify-content:space-between; margin-bottom:36px}
+h1{font-size:clamp(28px,4.2vw,44px); line-height:1.08; font-weight:800; letter-spacing:-0.02em; margin:0 0 10px; max-width:18ch}
+.lede{margin:0; color:var(--ink-2); max-width:56ch}
+.asof{color:var(--ink-2); font-size:14px; text-align:right}
+button{
+  font:600 14px/1 "Public Sans", system-ui, sans-serif; color:var(--ink); background:var(--sheet);
+  border:1.5px solid var(--rule); border-radius:6px; padding:9px 14px; cursor:pointer; margin-top:8px;
+}
+button:hover{border-color:var(--ink-2)}
+button:focus-visible, .seg button:focus-visible{outline:3px solid var(--due); outline-offset:2px}
+
+/* Status bars: the main read */
+.status{background:var(--sheet); border:1px solid var(--rule); border-radius:10px; padding:28px 28px 22px; margin-bottom:28px}
+.legend{display:flex; flex-wrap:wrap; gap:10px 22px; margin:0 0 24px; padding:0; list-style:none; font-size:14px; color:var(--ink-2)}
+.legend li{display:flex; align-items:center; gap:8px}
+.legend img{width:22px; height:22px}
+.asset{display:grid; grid-template-columns:150px 1fr; gap:6px 24px; align-items:center; padding:18px 0; border-top:1px solid var(--rule)}
+.asset:first-of-type{border-top:0; padding-top:0}
+.asset h2{font-size:20px; font-weight:700; margin:0; display:flex; align-items:center; gap:10px}
+.asset h2 img{width:30px; height:30px}
+.asset .total{grid-column:1; color:var(--ink-2); font-size:14px}
+.bar{grid-column:2; grid-row:1 / span 2; display:flex; height:56px; border-radius:6px; overflow:hidden; background:var(--track)}
+.bar span{display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:15px; min-width:0; white-space:nowrap; overflow:hidden; transition:flex-grow .6s ease}
+.bar .current{background:var(--current)} .bar .due{background:var(--due)} .bar .overdue{background:var(--overdue)} .bar .none{background:var(--none)}
+.counts{grid-column:2; display:flex; flex-wrap:wrap; gap:4px 22px; font-size:14px; color:var(--ink-2)}
+.counts b{color:var(--ink); font-size:17px; margin-right:4px}
+.msg{grid-column:2; color:var(--overdue); font-size:14px}
+
+section{background:var(--sheet); border:1px solid var(--rule); border-radius:10px; padding:24px 28px; margin-bottom:28px}
+section h2{font-size:22px; font-weight:700; margin:0 0 4px; letter-spacing:-0.01em}
+section .note{margin:0 0 18px; color:var(--ink-2); font-size:14px; max-width:70ch}
+.row{display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:flex-start}
+.seg{display:inline-flex; border:1.5px solid var(--rule); border-radius:6px; overflow:hidden}
+.seg button{margin:0; border:0; border-radius:0; border-left:1.5px solid var(--rule); background:transparent}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--sheet)}
+.chart{position:relative; height:320px}
+.empty{color:var(--ink-2); font-size:15px; padding:28px 0; max-width:60ch}
+.two{display:grid; grid-template-columns:1fr 1fr; gap:28px}
+.two section{margin-bottom:0}
+.two + section{margin-top:28px}
+
+.tablewrap{overflow-x:auto}
+table{width:100%; border-collapse:collapse; font-size:14px}
+th{text-align:left; font-weight:600; color:var(--ink-2); padding:8px 10px; border-bottom:1.5px solid var(--rule); white-space:nowrap}
+td{padding:9px 10px; border-bottom:1px solid var(--rule); white-space:nowrap}
+td.num{text-align:right}
+th.num{text-align:right}
+.pill{display:inline-flex; align-items:center; gap:6px; font-weight:600}
+.pill::before{content:""; width:10px; height:10px; border-radius:50%; background:currentColor}
+.pill.overdue{color:var(--overdue)} .pill.due{color:var(--due)} .pill.current{color:var(--current)} .pill.none{color:var(--none)}
+.mapbox{padding:0; overflow:hidden}
+.mapbox .maphead{padding:20px 28px 14px}
+.mapbox iframe{display:block; width:100%; height:min(70vh,620px); border:0; border-top:1px solid var(--rule)}
+.mapbox .mapfoot{padding:10px 28px; font-size:13px; color:var(--ink-2); border-top:1px solid var(--rule)}
+.mapbox .mapfoot a{color:inherit}
+.windows{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin:18px 0 22px}
+.win{border:1px solid var(--rule); border-left:5px solid var(--wc); border-radius:6px; padding:10px 12px}
+.win b{display:block; font-size:26px; line-height:1.1; font-weight:800}
+.win span{font-size:13px; color:var(--ink-2)}
+.controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+.controls button{margin:0}
+details.group{border-top:1px solid var(--rule); padding:6px 0}
+details.group summary{cursor:pointer; padding:10px 0; font-weight:700; font-size:17px; display:flex; align-items:center; gap:10px; list-style:none}
+details.group summary::-webkit-details-marker{display:none}
+details.group summary::before{content:"\25B8"; color:var(--ink-2); transition:transform .15s}
+details.group[open] summary::before{transform:rotate(90deg)}
+details.group summary .n{font-weight:500; color:var(--ink-2); font-size:15px}
+details.group summary .sw{width:12px; height:12px; border-radius:3px; background:var(--wc)}
+td .loc{font:inherit; font-size:13px; padding:4px 9px; margin:0}
+footer{color:var(--ink-2); font-size:13px; margin-top:8px}
+
+@media (max-width:760px){
+  .wrap{padding:28px 16px 48px}
+  .asset{grid-template-columns:1fr}
+  .bar,.counts,.msg{grid-column:1; grid-row:auto}
+  .two{grid-template-columns:1fr}
+  .status,section{padding:20px 18px}
+  .asof{text-align:left}
+}
+@media (prefers-reduced-motion: reduce){ .bar span{transition:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Round Hill hydrant &amp; valve maintenance</h1>
+      <p class="lede">Every hydrant and valve is due for service five years after its last maintenance. Counts update from the town's GIS each time this page loads.</p>
+    </div>
+    <div class="asof">
+      <div id="asof">Loading&hellip;</div>
+      <button id="refresh" type="button">Refresh data</button>
+    </div>
+  </header>
+
+  <div class="status" aria-live="polite">
+    <ul class="legend">
+      <li><img src="icons/hydrant-current.svg" alt="">Current: under 4 years</li>
+      <li><img src="icons/hydrant-due-soon.svg" alt="">Due soon: 4 to 5 years</li>
+      <li><img src="icons/hydrant-overdue.svg" alt="">Overdue: 5 years or more</li>
+      <li><img src="icons/hydrant-no-record.svg" alt="">No date on record</li>
+    </ul>
+    <div id="assets"></div>
+  </div>
+
+  <section class="mapbox" id="mapSection">
+    <div class="maphead">
+      <h2>Map</h2>
+      <p class="note" style="margin:0">Green is current, blue is due soon, red is overdue. Use "Show" in any list below to zoom here.</p>
+    </div>
+    <iframe id="mapFrame" title="Round Hill hydrant and valve maintenance map" loading="lazy" allowfullscreen></iframe>
+    <div class="mapfoot"><a id="mapLink" target="_blank" rel="noopener">Open the full map in ArcGIS</a></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <div>
+        <h2>When work comes due</h2>
+        <p class="note">Projected status for the next three years if no further maintenance is recorded. A rising red band shows when crews fall behind.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Asset type" id="projSeg"></div>
+    </div>
+    <div class="chart"><canvas id="projChart" aria-label="Projected maintenance status by month"></canvas></div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Recorded trend</h2>
+      <p class="note">Overdue and due-soon counts from weekly snapshots, plus today.</p>
+      <div class="chart" id="histBox"><canvas id="histChart" aria-label="Recorded overdue and due-soon counts over time"></canvas></div>
+    </section>
+    <section>
+      <h2>Service completed by year</h2>
+      <p class="note">Assets grouped by the year of their most recent maintenance.</p>
+      <div class="chart"><canvas id="yearChart" aria-label="Assets by year last serviced"></canvas></div>
+    </section>
+  </div>
+
+  <section>
+    <div class="row">
+      <div>
+        <h2>What’s due and coming due</h2>
+        <p class="note" id="dueNote">Every asset grouped by when its five-year service comes due.</p>
+      </div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Asset type" id="tableSeg"></div>
+        <button type="button" id="csvBtn">Download list (CSV)</button>
+      </div>
+    </div>
+    <div class="windows" id="windows"></div>
+    <div id="groups"></div>
+  </section>
+
+  <footer>Source: Town of Round Hill water GIS (ArcGIS Online). Five-year service cycle; "due soon" starts at four years.</footer>
+</div>
+
+<script>
+// ---------- Settings: edit these if a layer moves or a field is renamed ----------
+const CONFIG = {
+  layers: [
+    { key: "hydrants", label: "Hydrants", icon: "hydrant",
+      url: "https://services3.arcgis.com/3WQsNEWSVGwHihXP/arcgis/rest/services/Water_Management_Layer_2_view/FeatureServer/1" },
+    { key: "valves", label: "Valves", icon: "valve",
+      url: "https://services3.arcgis.com/3WQsNEWSVGwHihXP/arcgis/rest/services/Water_Management_Layer_2_view/FeatureServer/2" }
+  ],
+  // Map shown in the page. Replace with the src from Map Viewer > Share > Embed in website if you prefer its options.
+  mapEmbedUrl: "https://roundhillva.maps.arcgis.com/apps/Embed/index.html?webmap=dbb827218e5444228b98f350dec56115&zoom=true&scale=true&legend=true&disable_scroll=true&theme=light",
+  mapViewerUrl: "https://roundhillva.maps.arcgis.com/apps/mapviewer/index.html?webmap=dbb827218e5444228b98f350dec56115",
+  zoomLevel: 19,
+  dateField: "lastmaint",       // last maintenance date field on both layers
+  idFields: ["assetid", "facilityid"],
+  areaFields: ["subdivision"],
+  dueSoonYears: 4,
+  cycleYears: 5,
+  projectionMonths: 36,
+  historyUrl: "data/history.json"
+};
+// ------------------------------------------------------------------------------
+
+const YEAR_MS = 365.25 * 864e5;
+const STATUSES = [
+  { key: "current", label: "Current", file: "current" },
+  { key: "due",     label: "Due soon", file: "due-soon" },
+  { key: "overdue", label: "Overdue", file: "overdue" },
+  { key: "none",    label: "No record", file: "no-record" }
+];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const colors = () => ({ current: css("--current"), due: css("--due"), overdue: css("--overdue"), none: css("--none"), ink: css("--ink"), ink2: css("--ink-2"), rule: css("--rule") });
+const fmtDate = d => d ? new Date(d).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }) : "";
+const addYears = (t, y) => { const d = new Date(t); d.setFullYear(d.getFullYear() + y); return d.getTime(); };
+const addMonths = (t, m) => { const d = new Date(t); d.setMonth(d.getMonth() + m); return d.getTime(); };
+
+function statusAt(lastMs, atMs) {
+  if (lastMs == null) return "none";
+  const yrs = (atMs - lastMs) / YEAR_MS;
+  if (yrs < CONFIG.dueSoonYears) return "current";
+  if (yrs < CONFIG.cycleYears) return "due";
+  return "overdue";
+}
+function tally(items, atMs) {
+  const t = { current: 0, due: 0, overdue: 0, none: 0 };
+  items.forEach(i => t[statusAt(i.last, atMs)]++);
+  return t;
+}
+
+async function getJSON(url, params) {
+  const q = new URLSearchParams(params).toString();
+  const res = await fetch(url + (q ? "?" + q : ""));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.message || "service error");
+  return j;
+}
+
+async function loadLayer(layer) {
+  const meta = await getJSON(layer.url, { f: "json" });
+  const fields = (meta.fields || []).map(f => f.name);
+  const lower = Object.fromEntries(fields.map(f => [f.toLowerCase(), f]));
+  let dateField = lower[CONFIG.dateField.toLowerCase()];
+  if (!dateField) {
+    const guess = (meta.fields || []).find(f => f.type === "esriFieldTypeDate" && /maint/i.test(f.name));
+    if (!guess) throw new Error(`no "${CONFIG.dateField}" field on this layer`);
+    dateField = guess.name;
+  }
+  const oidField = meta.objectIdField || "OBJECTID";
+  const idField = CONFIG.idFields.map(f => lower[f]).find(Boolean);
+  const areaField = CONFIG.areaFields.map(f => lower[f]).find(Boolean);
+  const out = [oidField, dateField, idField, areaField].filter(Boolean).join(",");
+  const page = Math.min(meta.maxRecordCount || 1000, 2000);
+  const items = [];
+  for (let offset = 0; ; offset += page) {
+    const j = await getJSON(layer.url + "/query", {
+      where: "1=1", outFields: out, returnGeometry: "true", outSR: 4326, orderByFields: oidField,
+      resultOffset: offset, resultRecordCount: page, f: "json"
+    });
+    (j.features || []).forEach(f => {
+      const a = f.attributes;
+      const g = f.geometry || {};
+      items.push({ oid: a[oidField], id: idField ? a[idField] : null, area: areaField ? a[areaField] : null, last: a[dateField] ?? null, x: g.x ?? null, y: g.y ?? null });
+    });
+    if (!j.exceededTransferLimit || !(j.features || []).length) break;
+  }
+  return items;
+}
+
+// ---------- rendering ----------
+const state = { data: {}, errors: {}, now: Date.now(), proj: "all", table: "all", history: [] };
+const charts = {};
+
+function renderAssets() {
+  const box = document.getElementById("assets");
+  box.innerHTML = "";
+  CONFIG.layers.forEach(l => {
+    const el = document.createElement("div");
+    el.className = "asset";
+    const items = state.data[l.key];
+    const head = `<h2><img src="icons/${l.icon}-current.svg" alt="">${l.label}</h2>`;
+    if (!items) {
+      el.innerHTML = head + `<div class="total"></div><div class="msg">${l.label} didn't load: ${state.errors[l.key] || "unknown error"}. Check the ${l.key} URL in CONFIG at the bottom of index.html.</div>`;
+      box.appendChild(el); return;
+    }
+    const t = tally(items, state.now), n = items.length || 1;
+    const segs = STATUSES.filter(s => t[s.key]).map(s => {
+      const pct = Math.round(t[s.key] / n * 100);
+      return `<span class="${s.key}" style="flex-grow:${t[s.key]}" title="${s.label}: ${t[s.key]}">${pct >= 7 ? pct + "%" : ""}</span>`;
+    }).join("");
+    const counts = STATUSES.filter(s => s.key !== "none" || t.none).map(s => `<span><b>${t[s.key]}</b>${s.label.toLowerCase()}</span>`).join("");
+    el.innerHTML = head + `<div class="total">${items.length} total</div><div class="bar" role="img" aria-label="${l.label}: ${t.current} current, ${t.due} due soon, ${t.overdue} overdue${t.none ? ", " + t.none + " no record" : ""}">${segs}</div><div class="counts">${counts}</div>`;
+    box.appendChild(el);
+  });
+}
+
+function segButtons(id, current, onPick) {
+  const box = document.getElementById(id);
+  const opts = [{ key: "all", label: "Both" }, ...CONFIG.layers.filter(l => state.data[l.key]).map(l => ({ key: l.key, label: l.label }))];
+  box.innerHTML = opts.map(o => `<button type="button" data-k="${o.key}" aria-pressed="${o.key === current}">${o.label}</button>`).join("");
+  box.querySelectorAll("button").forEach(b => b.onclick = () => onPick(b.dataset.k));
+}
+const pick = key => key === "all" ? CONFIG.layers.flatMap(l => state.data[l.key] || []) : (state.data[key] || []);
+
+function baseOpts(c, stacked) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: matchMedia("(prefers-reduced-motion: reduce)").matches ? false : { duration: 500 },
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { position: "bottom", labels: { color: c.ink2, boxWidth: 12 } },
+               tooltip: {} },
+    scales: {
+      x: { stacked, ticks: { color: c.ink2, maxRotation: 0, autoSkipPadding: 14 }, grid: { display: false } },
+      y: { stacked, beginAtZero: true, ticks: { color: c.ink2, precision: 0 }, grid: { color: c.rule } }
+    }
+  };
+}
+Chart.defaults.font.family = '"Public Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+function draw(id, config) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), config); }
+
+function renderProjection() {
+  segButtons("projSeg", state.proj, k => { state.proj = k; renderProjection(); });
+  const c = colors(), items = pick(state.proj);
+  const labels = [], series = { current: [], due: [], overdue: [], none: [] };
+  for (let m = 0; m <= CONFIG.projectionMonths; m++) {
+    const at = addMonths(state.now, m), t = tally(items, at);
+    labels.push(m === 0 ? "Now" : new Date(at).toLocaleDateString("en-US", { month: "short", year: "2-digit" }));
+    Object.keys(series).forEach(k => series[k].push(t[k]));
+  }
+  const ds = STATUSES.filter(s => s.key !== "none" || series.none.some(v => v)).map(s => ({
+    label: s.label, data: series[s.key], fill: true, borderColor: c[s.key], backgroundColor: c[s.key] + "CC", pointRadius: 0, borderWidth: 1.5, stepped: true
+  }));
+  draw("projChart", { type: "line", data: { labels, datasets: ds }, options: baseOpts(c, true) });
+}
+
+function renderHistory() {
+  const c = colors(), box = document.getElementById("histBox");
+  const pts = state.history.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const today = new Date(state.now).toISOString().slice(0, 10);
+  const live = { date: today };
+  CONFIG.layers.forEach(l => { if (state.data[l.key]) live[l.key] = tally(state.data[l.key], state.now); });
+  const merged = pts.filter(p => p.date !== today).concat([live]);
+  if (merged.length < 2) {
+    if (charts.histChart) { charts.histChart.destroy(); delete charts.histChart; }
+    box.innerHTML = `<p class="empty">The trend line starts once the weekly snapshot has run. In GitHub, open Actions, choose "Weekly maintenance snapshot", and select "Run workflow" to record the first point.</p><canvas id="histChart" hidden></canvas>`;
+    return;
+  }
+  if (!document.getElementById("histChart") || box.querySelector(".empty")) box.innerHTML = `<canvas id="histChart" aria-label="Recorded overdue and due-soon counts over time"></canvas>`;
+  const labels = merged.map(p => new Date(p.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }));
+  const ds = [];
+  CONFIG.layers.forEach((l, i) => {
+    ["overdue", "due"].forEach(k => ds.push({
+      label: `${l.label} ${k === "due" ? "due soon" : "overdue"}`,
+      data: merged.map(p => p[l.key] ? p[l.key][k] : null),
+      borderColor: c[k], backgroundColor: c[k], borderDash: i ? [6, 4] : [], pointRadius: 2.5, tension: 0.2, spanGaps: true
+    }));
+  });
+  const ho = baseOpts(c, false); ho.plugins.legend.labels.usePointStyle = true; ho.plugins.legend.labels.pointStyle = "line";
+  draw("histChart", { type: "line", data: { labels, datasets: ds }, options: ho });
+}
+
+function renderYears() {
+  const c = colors();
+  const years = new Set();
+  CONFIG.layers.forEach(l => (state.data[l.key] || []).forEach(i => i.last != null && years.add(new Date(i.last).getFullYear())));
+  const labels = [...years].sort();
+  const ds = CONFIG.layers.filter(l => state.data[l.key]).map((l, i) => ({
+    label: l.label,
+    data: labels.map(y => state.data[l.key].filter(it => it.last != null && new Date(it.last).getFullYear() === y).length),
+    backgroundColor: i ? c.ink2 : c.ink, borderRadius: 3
+  }));
+  draw("yearChart", { type: "bar", data: { labels, datasets: ds }, options: baseOpts(c, false) });
+}
+
+const WINDOWS = [
+  { key: "overdue", label: "Overdue",            short: "overdue",         test: d => d < 0,                 color: "--overdue" },
+  { key: "m3",      label: "Due within 3 months", short: "within 3 months", test: d => d >= 0 && d <= 91,     color: "--overdue" },
+  { key: "m6",      label: "Due in 3 to 6 months", short: "in 3-6 months",  test: d => d > 91 && d <= 183,    color: "--due" },
+  { key: "m12",     label: "Due in 6 to 12 months", short: "in 6-12 months", test: d => d > 183 && d <= 365,  color: "--due" },
+  { key: "m24",     label: "Due in 1 to 2 years", short: "in 1-2 years",    test: d => d > 365 && d <= 730,   color: "--current" },
+  { key: "later",   label: "Due in more than 2 years", short: "after 2 years", test: d => d > 730,           color: "--current" },
+  { key: "none",    label: "No maintenance date", short: "no date",         test: d => d == null,             color: "--none" }
+];
+const STLABEL = { current: "Current", due: "Due soon", overdue: "Overdue", none: "No record" };
+const esc = v => String(v ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+function dueRows() {
+  const rows = [];
+  CONFIG.layers.forEach(l => {
+    if (state.table !== "all" && state.table !== l.key) return;
+    (state.data[l.key] || []).forEach(it => {
+      const due = it.last == null ? null : addYears(it.last, CONFIG.cycleYears);
+      const days = due == null ? null : Math.round((due - state.now) / 864e5);
+      rows.push({ l, it, due, days, st: statusAt(it.last, state.now), win: WINDOWS.find(w => w.test(days)).key });
+    });
+  });
+  rows.sort((a, b) => (a.due ?? -Infinity) - (b.due ?? -Infinity));
+  return rows;
+}
+
+function showOnMap(x, y) {
+  const f = document.getElementById("mapFrame");
+  const u = new URL(CONFIG.mapEmbedUrl);
+  u.searchParams.set("center", `${x.toFixed(6)},${y.toFixed(6)}`);
+  u.searchParams.set("level", CONFIG.zoomLevel);
+  f.src = u.toString();
+  document.getElementById("mapSection").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+function renderTable() {
+  segButtons("tableSeg", state.table, k => { state.table = k; renderTable(); });
+  const rows = dueRows();
+  const byWin = Object.fromEntries(WINDOWS.map(w => [w.key, rows.filter(r => r.win === w.key)]));
+
+  document.getElementById("windows").innerHTML = WINDOWS.filter(w => w.key !== "none" || byWin.none.length).map(w =>
+    `<div class="win" style="--wc:var(${w.color})"><b>${byWin[w.key].length}</b><span>${w.short}</span></div>`).join("");
+
+  const head = `<thead><tr><th>Asset</th><th>ID</th><th>Subdivision</th><th>Last serviced</th><th>Due</th><th class="num">Days</th><th>Status</th><th></th></tr></thead>`;
+  document.getElementById("groups").innerHTML = WINDOWS.filter(w => byWin[w.key].length).map(w => {
+    const body = byWin[w.key].map(r => `<tr>
+      <td>${esc(r.l.label.replace(/s$/, ""))}</td><td>${esc(r.it.id ?? "OID " + r.it.oid)}</td><td>${esc(r.it.area)}</td>
+      <td>${fmtDate(r.it.last)}</td><td>${fmtDate(r.due)}</td><td class="num">${r.days ?? ""}</td>
+      <td><span class="pill ${r.st}">${STLABEL[r.st]}</span></td>
+      <td>${r.it.x != null ? `<button type="button" class="loc" data-x="${r.it.x}" data-y="${r.it.y}" aria-label="Show ${esc(r.it.id ?? r.it.oid)} on the map">Show</button>` : ""}</td></tr>`).join("");
+    const open = ["overdue", "m3", "m6", "m12", "none"].includes(w.key) ? " open" : "";
+    return `<details class="group"${open} style="--wc:var(${w.color})"><summary><span class="sw"></span>${w.label} <span class="n">${byWin[w.key].length}</span></summary>
+      <div class="tablewrap"><table>${head}<tbody>${body}</tbody></table></div></details>`;
+  }).join("") || `<p class="empty">No assets loaded.</p>`;
+  document.querySelectorAll("#groups .loc").forEach(b => b.onclick = () => showOnMap(+b.dataset.x, +b.dataset.y));
+
+  const soon = byWin.overdue.length + byWin.m3.length + byWin.m6.length + byWin.m12.length;
+  document.getElementById("dueNote").textContent =
+    `${rows.length} assets grouped by when their five-year service comes due. ${soon} are overdue or due within 12 months. Negative days are past due.`;
+
+  document.getElementById("csvBtn").onclick = () => {
+    const lines = [["Asset", "ID", "OBJECTID", "Subdivision", "Last serviced", "Due", "Days until due", "Status", "Window", "Latitude", "Longitude"]];
+    rows.forEach(r => lines.push([r.l.label.replace(/s$/, ""), r.it.id ?? "", r.it.oid, r.it.area ?? "", fmtDate(r.it.last), fmtDate(r.due),
+      r.days ?? "", STLABEL[r.st], WINDOWS.find(w => w.key === r.win).label, r.it.y ?? "", r.it.x ?? ""]));
+    const csv = lines.map(l => l.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(",")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `round-hill-maintenance-due-${new Date(state.now).toISOString().slice(0, 10)}.csv`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
+
+function renderAll() { renderAssets(); renderProjection(); renderHistory(); renderYears(); renderTable(); }
+
+async function load() {
+  const btn = document.getElementById("refresh");
+  btn.disabled = true; btn.textContent = "Loading…";
+  state.now = Date.now(); state.data = {}; state.errors = {};
+  await Promise.all(CONFIG.layers.map(async l => {
+    try { state.data[l.key] = await loadLayer(l); } catch (e) { state.errors[l.key] = e.message; }
+  }));
+  try { const h = await fetch(CONFIG.historyUrl, { cache: "no-store" }); state.history = h.ok ? await h.json() : []; } catch { state.history = []; }
+  document.getElementById("asof").textContent = "Data as of " + new Date(state.now).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  renderAll();
+  btn.disabled = false; btn.textContent = "Refresh data";
+}
+document.getElementById("mapFrame").src = CONFIG.mapEmbedUrl;
+document.getElementById("mapLink").href = CONFIG.mapViewerUrl;
+document.getElementById("refresh").onclick = load;
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+load();
+</script>
+</body>
+</html>
