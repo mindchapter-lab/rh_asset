@@ -13,5 +13,20 @@
    "overdue": 119,
    "none": 0
   }
+ },
+ {
+  "date": "2026-11-16",
+  "hydrants": {
+   "current": 58,
+   "due": 240,
+   "overdue": 0,
+   "none": 0
+  },
+  "valves": {
+   "current": 463,
+   "due": 85,
+   "overdue": 229,
+   "none": 0
+  }
  }
 ]
